@@ -1,48 +1,66 @@
+import java.io.File
+
 import scala.collection.mutable.ArrayBuffer
 import java.nio.file.{Files, Paths}
-import java.nio.charset.StandardCharsets
+import java.io.PrintWriter
+
 
 object Main extends App {
-  println("Hello, World!")
-
   val n = 16
-  //Files.write(Paths.get("file.txt"), "file contents".getBytes(StandardCharsets.UTF_8))
 
-  val origFileBytes = Files.readAllBytes(Paths.get("file.txt"))
+  if (args.length < 2)
+    println("Not enough arguments")
+  else {
+    val arg1 = args(0)
+    val arg2 = args(1)
+    executeCommand(arg1, arg2)
+  }
 
-  val r = prepare(origFileBytes)
-  Files.write(Paths.get("fileExt"), r._1.toArray)
-  Files.write(Paths.get("fileDict"), r._2.toArray)
-
-  val norm = extendedToNormal(r._1)
-
-  val fileExtBytes = Files.readAllBytes(Paths.get("fileExt"))
-  val dictBytes = Files.readAllBytes(Paths.get("fileDict"))
-
-  //Files.write(Paths.get("fileEnc.txt"), Encryption.encrypt(origFileBytes))
-  val fileEnc = Encryption.encrypt(fileExtBytes)
-  Files.write(Paths.get("fileExtEnc"),Encryption.encrypt(fileExtBytes) )
-  val dictEnc = Encryption.encrypt(dictBytes)
-  Files.write(Paths.get("fileDictEnc"), Encryption.encrypt(dictBytes))
-  val tr = translate(dictBytes, dictEnc)
-
-  val decoded = decode(fileEnc,tr)
-  val or = extendedToNormal(decoded)
-  val a = ""
-
-  def prepare(array: Seq[Byte]) = {
-    def byteToSpecArr(byte: Byte) = {
-      val tail: List[Byte] = List.fill(n - 1)(0)
-      byte :: tail
+  def executeCommand(arg1: String, arg2: String) = {
+    arg1 match {
+      case "prepare" =>
+        val bytes = Files.readAllBytes(Paths.get(arg2))
+        val extended = extend(bytes)
+        val dict = createDict
+        Files.write(Paths.get(arg2 + "ext"), extended.toArray)
+        Files.write(Paths.get(arg2 + "dict"), dict.toArray)
+      case "encode" =>
+        val fileExtBytes = Files.readAllBytes(Paths.get(arg2 + "ext"))
+        val dictBytes = Files.readAllBytes(Paths.get(arg2 + "dict"))
+        Files.write(Paths.get(arg2 + "ext"), Encryption.encrypt(fileExtBytes))
+        Files.write(Paths.get(arg2 + "dict"), Encryption.encrypt(dictBytes))
+      case "translate" =>
+        val dictEnc = Files.readAllBytes(Paths.get(arg2 + "dict"))
+        val dict = createDict
+        val file = new File(arg2)
+        val par = new File(file.getAbsolutePath).getParent
+        printMap(par, translate(dict.toSeq, dictEnc))
+      case "decode" =>
+        val fileExtBytes = Files.readAllBytes(Paths.get(arg2 + "ext"))
+        val dictBytes = Files.readAllBytes(Paths.get(arg2 + "dict"))
+        val dict = createDict
+        val tr = translate(dict.toSeq, dictBytes)
+        val decoded = decode(fileExtBytes, tr)
+        val norm = extendedToNormal(decoded.toSeq)
+        Files.write(Paths.get(arg2), norm.toArray)
+      case _ => println("wrong arguments")
     }
+  }
 
-    val prep = array.flatMap(b => byteToSpecArr(b))
+  def byteToSpecArr(byte: Byte) = {
+    val tail: List[Byte] = List.fill(n - 1)(0)
+    byte :: tail
+  }
 
+  def extend(array: Seq[Byte]) = {
+    array.flatMap(b => byteToSpecArr(b))
+  }
+
+  def createDict = {
     val buffer = ArrayBuffer[Byte]()
     for (i <- 0 to 255)
       buffer ++= byteToSpecArr(i.toByte)
-
-    (prep, buffer)
+    buffer
   }
 
   def translate(originalArray: Seq[Byte], encodedArray: Seq[Byte]) = {
@@ -52,11 +70,19 @@ object Main extends App {
     zipped
   }
 
+  def printMap(path: String, map: Map[Seq[Byte], Seq[Byte]]) = {
+    val writer = new PrintWriter(path, "UTF-8")
+    for {(key, value) <- map} {
+      writer.println(key.toString() + " -> " + value.toString())
+    }
+    writer.close()
+  }
+
   def decode(encodedExt: Seq[Byte], decodeMap: Map[Seq[Byte], Seq[Byte]]) = {
     val grouped = encodedExt.grouped(16).toList
     val buffArr = ArrayBuffer[Byte]()
 
-    for(group <- grouped){
+    for (group <- grouped) {
       buffArr ++= decodeMap(group)
     }
     buffArr
